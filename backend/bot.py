@@ -35,25 +35,11 @@ def estimate_elo(games, username):
             elo = game.headers.get("WhiteElo", None)
         else:
             elo = game.headers.get("BlackElo", None)
-        if elo and elo.isdigit():
+        if elo and str(elo).isdigit():
             elos.append(int(elo))
     if elos:
         return int(sum(elos) / len(elos))
-    return 1200  # default
-
-
-def elo_to_depth(elo):
-    """Convert ELO to Stockfish depth to match strength."""
-    if elo < 800:   return 1
-    if elo < 1000:  return 2
-    if elo < 1200:  return 3
-    if elo < 1400:  return 5
-    if elo < 1600:  return 7
-    if elo < 1800:  return 10
-    if elo < 2000:  return 13
-    if elo < 2200:  return 16
-    if elo < 2500:  return 18
-    return 20
+    return 1200
 
 
 def get_bot_move(board, opening_book, stockfish_path, depth=None, elo=None):
@@ -72,15 +58,20 @@ def get_bot_move(board, opening_book, stockfish_path, depth=None, elo=None):
                 if move in board.legal_moves:
                     return uci_move
 
-    # Use ELO-based depth if provided
-    if depth is None:
-        depth = elo_to_depth(elo) if elo else 5
+    # Use Stockfish UCI_Elo for accurate strength matching
+    target_elo = max(500, min(elo or 1200, 3000))
 
     try:
         engine = chess.engine.SimpleEngine.popen_uci(stockfish_path)
-        result = engine.play(board, chess.engine.Limit(depth=depth))
+        engine.configure({
+            "UCI_LimitStrength": True,
+            "UCI_Elo": target_elo
+        })
+        result = engine.play(board, chess.engine.Limit(time=0.5))
         engine.quit()
         return result.move.uci()
-    except Exception:
+    except Exception as e:
+        print(f"Stockfish error: {e}")
+        # Fallback to random legal move
         legal = list(board.legal_moves)
         return random.choice(legal).uci() if legal else None
