@@ -12,9 +12,13 @@ export default function Chatbot({ targetUser }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
+  const chatRef = useRef(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Scroll only inside the chat box, not the whole page
+    if (chatRef.current) {
+      chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    }
   }, [messages]);
 
   useEffect(() => {
@@ -42,7 +46,7 @@ export default function Chatbot({ targetUser }) {
       });
       setMessages([...newMessages, { role: "assistant", content: res.data.reply }]);
     } catch (err) {
-      const errMsg = err.response?.data?.error || "Backend error — make sure python app.py is running.";
+      const errMsg = err.response?.data?.error || "Backend error.";
       setMessages([...newMessages, { role: "assistant", content: `Error: ${errMsg}` }]);
     } finally {
       setLoading(false);
@@ -63,7 +67,7 @@ export default function Chatbot({ targetUser }) {
         {targetUser && <span className="chat-user"> — studying {targetUser}</span>}
       </div>
 
-      <div className="chat-messages">
+      <div className="chat-messages" ref={chatRef}>
         {messages.map((msg, i) => (
           <div key={i} className={`msg ${msg.role}`}>
             <div className="msg-bubble">{msg.content}</div>
