@@ -17,7 +17,6 @@ CORS(app)
 
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 _cache = {}
-STOCKFISH_PATH = os.environ.get("STOCKFISH_PATH", "stockfish")
 
 
 @app.route("/api/analyze", methods=["POST"])
@@ -92,7 +91,7 @@ def bot_move():
     elo = _cache.get(username, {}).get("elo", None)
     try:
         board = chess.Board(fen)
-        move = get_bot_move(board, opening_book, STOCKFISH_PATH, elo=elo)
+        move = get_bot_move(board, opening_book, elo=elo)
         return jsonify({"move": move})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -129,11 +128,12 @@ def recommend_openings():
 {username}'s weak openings:
 {weak_summary}
 
+Recommend exactly 3 openings with AT LEAST 6-8 moves each.
 Respond ONLY with valid JSON array, no markdown, no explanation:
 [
   {{
     "name": "Opening Name",
-    "moves": "1.e4 e5 2.Nf3 Nc6",
+    "moves": "1.e4 e5 2.Nf3 Nc6 3.Bb5 a6 4.Ba4 Nf6 5.O-O Be7",
     "description": "One sentence why this works against this player.",
     "difficulty": "Beginner/Intermediate/Advanced",
     "famous_players": "Player1, Player2, Player3"
@@ -147,7 +147,7 @@ Respond ONLY with valid JSON array, no markdown, no explanation:
                 {"role": "system", "content": "You are a chess coach. Always respond with valid JSON only, no markdown, no explanation."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=800,
+            max_tokens=1000,
         )
         text = response.choices[0].message.content.strip()
         text = text.replace("```json", "").replace("```", "").strip()

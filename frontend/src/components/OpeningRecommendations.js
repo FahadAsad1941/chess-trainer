@@ -43,10 +43,10 @@ export default function OpeningRecommendations({ targetUser, analysisData, playe
   function getMoves(moves_str) {
     return moves_str
       .trim()
-      .replace(/\d+\./g, " ")
+      .replace(/\d+\.\s*/g, "")
       .trim()
       .split(/\s+/)
-      .filter(m => m.length > 0);
+      .filter(m => m.length > 0 && m !== "...");
   }
 
   function buildFenAtMove(moves_str, moveIndex) {
