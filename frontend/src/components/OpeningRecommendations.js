@@ -13,6 +13,7 @@ export default function OpeningRecommendations({ targetUser, analysisData }) {
   useEffect(() => {
     if (!targetUser || !analysisData) return;
     fetchRecommendations();
+    return () => Object.values(intervalsRef.current).forEach(clearInterval);
   }, [targetUser]);
 
   async function fetchRecommendations() {
@@ -28,7 +29,7 @@ export default function OpeningRecommendations({ targetUser, analysisData }) {
       setRecommendations(recs);
       const states = {};
       recs.forEach((_, i) => {
-        states[i] = { game: new Chess(), moveIndex: 0 };
+        states[i] = { fen: new Chess().fen(), moveIndex: 0 };
       });
       setBoardStates(states);
     } catch (err) {
@@ -38,59 +39,84 @@ export default function OpeningRecommendations({ targetUser, analysisData }) {
     }
   }
 
-  // Parse "1.e4 e5 2.Nf3 Nc6" into ["e4","e5","Nf3","Nc6"]
   function getMoves(moves_str) {
+    // Parse "1.e4 e5 2.Nf3 Nc6" -> ["e4","e5","Nf3","Nc6"]
     return moves_str
       .trim()
+      .replace(/\d+\./g, " ")
+      .trim()
       .split(/\s+/)
-      .filter(m => !/^\d+\./.test(m))
       .filter(m => m.length > 0);
   }
 
-  function goToMove(index, moveIndex, moves_str) {
+  function buildFenAtMove(moves_str, moveIndex) {
     const moves = getMoves(moves_str);
     const g = new Chess();
     for (let i = 0; i < moveIndex && i < moves.length; i++) {
-      try { g.move(moves[i]); } catch (_) {}
+      try {
+        g.move(moves[i]);
+      } catch (_) {
+        break;
+      }
     }
+    return g.fen();
+  }
+
+  function setMoveIndex(index, newMoveIndex, moves_str) {
+    const moves = getMoves(moves_str);
+    const clamped = Math.max(0, Math.min(newMoveIndex, moves.length));
+    const fen = buildFenAtMove(moves_str, clamped);
     setBoardStates(prev => ({
       ...prev,
-      [index]: { game: g, moveIndex }
+      [index]: { fen, moveIndex: clamped }
     }));
-  }
-
-  function stepForward(index, moves_str) {
-    const moves = getMoves(moves_str);
-    const cur = boardStates[index];
-    if (!cur || cur.moveIndex >= moves.length) return;
-    goToMove(index, cur.moveIndex + 1, moves_str);
-  }
-
-  function stepBack(index, moves_str) {
-    const cur = boardStates[index];
-    if (!cur || cur.moveIndex <= 0) return;
-    goToMove(index, cur.moveIndex - 1, moves_str);
   }
 
   function resetBoard(index) {
     clearInterval(intervalsRef.current[index]);
     setBoardStates(prev => ({
       ...prev,
-      [index]: { game: new Chess(), moveIndex: 0 }
+      [index]: { fen: new Chess().fen(), moveIndex: 0 }
     }));
+  }
+
+  function stepBack(index, moves_str) {
+    clearInterval(intervalsRef.current[index]);
+    const cur = boardStates[index];
+    if (!cur || cur.moveIndex <= 0) return;
+    setMoveIndex(index, cur.moveIndex - 1, moves_str);
+  }
+
+  function stepForward(index, moves_str) {
+    clearInterval(intervalsRef.current[index]);
+    const moves = getMoves(moves_str);
+    const cur = boardStates[index];
+    if (!cur || cur.moveIndex >= moves.length) return;
+    setMoveIndex(index, cur.moveIndex + 1, moves_str);
   }
 
   function playAll(index, moves_str) {
     clearInterval(intervalsRef.current[index]);
     const moves = getMoves(moves_str);
-    let i = boardStates[index]?.moveIndex || 0;
+    let current = boardStates[index]?.moveIndex || 0;
+
+    // If already at end, reset first
+    if (current >= moves.length) {
+      current = 0;
+      setMoveIndex(index, 0, moves_str);
+    }
+
     intervalsRef.current[index] = setInterval(() => {
-      if (i >= moves.length) {
+      current += 1;
+      if (current > moves.length) {
         clearInterval(intervalsRef.current[index]);
         return;
       }
-      i++;
-      goToMove(index, i, moves_str);
+      const fen = buildFenAtMove(moves_str, current);
+      setBoardStates(prev => ({
+        ...prev,
+        [index]: { fen, moveIndex: current }
+      }));
     }, 800);
   }
 
@@ -105,24 +131,17 @@ export default function OpeningRecommendations({ targetUser, analysisData }) {
         const cur = boardStates[i];
         return (
           <div className="rec-card" key={i}>
-            <div className="rec-left">
+
+            {/* LEFT: number + board + controls */}
+            <div className="rec-board-col">
               <div className="rec-number">#{i + 1} RECOMMENDATION</div>
-              <div className="rec-name">{rec.name}</div>
-              <div className="rec-moves">{rec.moves}</div>
-              <div className="rec-desc">{rec.description}</div>
-              <div className="rec-meta">
-                <span><strong>Difficulty:</strong> {rec.difficulty}</span>
-                <span><strong>Famous players:</strong> {rec.famous_players}</span>
-              </div>
-            </div>
-            <div className="rec-right">
               <Chessboard
-                position={cur?.game.fen() || "start"}
+                position={cur?.fen || "start"}
                 arePiecesDraggable={false}
-                boardWidth={220}
+                boardWidth={300}
                 customDarkSquareStyle={{ backgroundColor: "#4a7c59" }}
                 customLightSquareStyle={{ backgroundColor: "#f0d9b5" }}
-                customBoardStyle={{ borderRadius: "4px", overflow: "hidden" }}
+                customBoardStyle={{ borderRadius: "6px", overflow: "hidden" }}
               />
               <div className="rec-board-info">
                 {cur ? `Move ${cur.moveIndex} of ${moves.length}` : ""}
@@ -134,6 +153,18 @@ export default function OpeningRecommendations({ targetUser, analysisData }) {
                 <button onClick={() => stepForward(i, rec.moves)}>▶|</button>
               </div>
             </div>
+
+            {/* MIDDLE: name + moves + description */}
+            <div className="rec-center-col">
+              <div className="rec-name">{rec.name}</div>
+              <div className="rec-moves">{rec.moves}</div>
+              <div className="rec-desc">{rec.description}</div>
+              <div className="rec-meta">
+                <span><strong>Difficulty:</strong> {rec.difficulty}</span>
+                <span><strong>Famous players:</strong> {rec.famous_players}</span>
+              </div>
+            </div>
+
           </div>
         );
       })}
