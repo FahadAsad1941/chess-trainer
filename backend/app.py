@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
+import json as json_lib
 import chess
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -88,6 +89,7 @@ def bot_move():
 def health():
     return jsonify({"status": "ok"})
 
+
 @app.route("/api/recommend-openings", methods=["POST"])
 def recommend_openings():
     data = request.json
@@ -118,17 +120,22 @@ Respond ONLY with valid JSON array, no markdown, no explanation:
   }}
 ]"""
 
-    response = anthropic_client.messages.create(
-        model="claude-opus-4-5",
-        max_tokens=800,
-        messages=[{"role": "user", "content": prompt}]
-    )
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": "You are a chess coach. Always respond with valid JSON only."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=800,
+        )
+        text = response.choices[0].message.content.strip()
+        text = text.replace("```json", "").replace("```", "").strip()
+        recs = json_lib.loads(text)
+        return jsonify({"recommendations": recs})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    import json as json_lib
-    text = response.content[0].text.strip()
-    text = text.replace("```json", "").replace("```", "").strip()
-    recs = json_lib.loads(text)
-    return jsonify({"recommendations": recs})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
