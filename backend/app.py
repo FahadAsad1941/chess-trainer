@@ -10,7 +10,7 @@ from groq import Groq
 
 from fetcher import fetch_games_pgn
 from analyzer import parse_games, get_opening_stats, build_player_summary
-from bot import build_opening_book, get_bot_move
+from bot import build_opening_book, get_bot_move, estimate_elo
 
 app = Flask(__name__)
 CORS(app)
@@ -35,8 +35,20 @@ def analyze():
         opening_stats = get_opening_stats(games, username)
         summary = build_player_summary(username, opening_stats, len(games))
         opening_book = build_opening_book(games, username)
-        _cache[username] = {"opening_stats": opening_stats, "summary": summary, "opening_book": opening_book}
-        return jsonify({"username": username, "total_games": len(games), "opening_stats": opening_stats[:20], "summary": summary})
+        elo = estimate_elo(games, username)
+        _cache[username] = {
+            "opening_stats": opening_stats,
+            "summary": summary,
+            "opening_book": opening_book,
+            "elo": elo
+        }
+        return jsonify({
+            "username": username,
+            "total_games": len(games),
+            "opening_stats": opening_stats[:20],
+            "summary": summary,
+            "elo": elo
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -77,9 +89,10 @@ def bot_move():
     if not fen:
         return jsonify({"error": "fen required"}), 400
     opening_book = _cache.get(username, {}).get("opening_book", {})
+    elo = _cache.get(username, {}).get("elo", None)
     try:
         board = chess.Board(fen)
-        move = get_bot_move(board, opening_book, STOCKFISH_PATH)
+        move = get_bot_move(board, opening_book, STOCKFISH_PATH, elo=elo)
         return jsonify({"move": move})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -124,7 +137,7 @@ Respond ONLY with valid JSON array, no markdown, no explanation:
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": "You are a chess coach. Always respond with valid JSON only."},
+                {"role": "system", "content": "You are a chess coach. Always respond with valid JSON only, no markdown, no explanation."},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=800,
