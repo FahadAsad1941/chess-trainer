@@ -196,8 +196,7 @@ export default function Board({ targetUser, onColorChange }) {
   }
 
   const customSquareStyles = { ...optionSquares, ...kingSquare() };
-  const showStartButton = trainingMode && targetUser && playerColor === "black" && !botStarted && game.fen() === new Chess().fen();
-
+  const showStartButton = trainingMode && targetUser && playerColor === "black" && !botStarted;
   return (
     <div className="board-panel card">
       <div className="board-controls">
