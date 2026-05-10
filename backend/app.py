@@ -88,6 +88,47 @@ def bot_move():
 def health():
     return jsonify({"status": "ok"})
 
+@app.route("/api/recommend-openings", methods=["POST"])
+def recommend_openings():
+    data = request.json
+    username = data.get("username", "")
+    opening_stats = data.get("opening_stats", [])
+
+    weak = [o for o in opening_stats if o["win_rate"] < 45 and o["total"] >= 2]
+    weak_summary = "\n".join([
+        f"- {o['opening']}: {o['win_rate']}% win rate in {o['total']} games"
+        for o in weak[:6]
+    ])
+
+    if not weak_summary:
+        weak_summary = "No clear weaknesses found, recommend solid universal openings."
+
+    prompt = f"""You are a chess coach. The player {username} struggles against these openings:
+{weak_summary}
+
+Recommend exactly 3 openings to play AGAINST {username} to exploit their weaknesses.
+Respond ONLY with valid JSON array, no markdown, no explanation:
+[
+  {{
+    "name": "Opening Name",
+    "moves": "1.e4 e5 2.Nf3 Nc6",
+    "description": "One sentence why this works against this player.",
+    "difficulty": "Beginner/Intermediate/Advanced",
+    "famous_players": "Player1, Player2, Player3"
+  }}
+]"""
+
+    response = anthropic_client.messages.create(
+        model="claude-opus-4-5",
+        max_tokens=800,
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    import json as json_lib
+    text = response.content[0].text.strip()
+    text = text.replace("```json", "").replace("```", "").strip()
+    recs = json_lib.loads(text)
+    return jsonify({"recommendations": recs})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
