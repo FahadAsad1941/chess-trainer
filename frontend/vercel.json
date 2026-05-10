@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://chess-trainer-production-ff86.up.railway.app/api/:path*"
+    }
+  ]
+}

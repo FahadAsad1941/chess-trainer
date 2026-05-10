@@ -15,7 +15,6 @@
     "start": "react-scripts start",
     "build": "react-scripts build"
   },
-  "proxy": "https://chess-trainer-production-ff86.up.railway.app",
   "browserslist": {
     "production": [">0.2%", "not dead"],
     "development": ["last 1 chrome version"]
