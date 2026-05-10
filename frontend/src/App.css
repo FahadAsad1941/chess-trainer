@@ -47,10 +47,22 @@ body {
 .app-body { flex: 1; padding: 20px; }
 
 .train-layout {
-  display: grid; grid-template-columns: minmax(360px, 520px) 1fr;
-  gap: 20px; max-width: 1100px; margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
 }
-@media (max-width: 900px) { .train-layout { grid-template-columns: 1fr; } }
+
+.train-top {
+  display: grid;
+  grid-template-columns: minmax(360px, 520px) 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 900px) {
+  .train-top { grid-template-columns: 1fr; }
+}
 
 .card {
   background: #13131a; border: 1px solid #1e1e2a;
@@ -58,16 +70,16 @@ body {
   box-shadow: 0 4px 24px rgba(0,0,0,0.3);
 }
 
-.app-footer {
-  text-align: center; padding: 16px;
-  font-size: 11px; color: #333;
-  border-top: 1px solid #1e1e2a;
-
-  .chat-col {
+.chat-col {
   display: flex;
   flex-direction: column;
   gap: 16px;
   flex: 1;
   min-width: 0;
 }
+
+.app-footer {
+  text-align: center; padding: 16px;
+  font-size: 11px; color: #333;
+  border-top: 1px solid #1e1e2a;
 }

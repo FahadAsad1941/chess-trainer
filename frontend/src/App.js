@@ -32,11 +32,13 @@ export default function App() {
       <main className="app-body">
         {activeTab === "train" ? (
           <div className="train-layout">
-            <Board targetUser={targetUser} />
-            <div className="chat-col">
-              <Chatbot targetUser={targetUser} />
-              <OpeningRecommendations targetUser={targetUser} analysisData={analysisData} />
+            <div className="train-top">
+              <Board targetUser={targetUser} />
+              <div className="chat-col">
+                <Chatbot targetUser={targetUser} />
+              </div>
             </div>
+            <OpeningRecommendations targetUser={targetUser} analysisData={analysisData} />
           </div>
         ) : (
           <Analysis data={analysisData} targetUser={targetUser} />
