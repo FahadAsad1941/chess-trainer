@@ -4,7 +4,7 @@ import { Chess } from "chess.js";
 import axios from "axios";
 import "./Board.css";
 
-export default function Board({ targetUser }) {
+export default function Board({ targetUser, onColorChange }) {
   const [game, setGame] = useState(new Chess());
   const [playerColor, setPlayerColor] = useState("white");
   const [status, setStatus] = useState("Your turn");
@@ -13,6 +13,7 @@ export default function Board({ targetUser }) {
   const [moveFrom, setMoveFrom] = useState(null);
   const [optionSquares, setOptionSquares] = useState({});
   const [lastMove, setLastMove] = useState(null);
+  const [botStarted, setBotStarted] = useState(false);
 
   function playSound() {
     try {
@@ -56,8 +57,25 @@ export default function Board({ targetUser }) {
     return [[lastMove.from, lastMove.to, "rgb(0,128,0)"]];
   }
 
+  function flipBoard() {
+    const newColor = playerColor === "white" ? "black" : "white";
+    setPlayerColor(newColor);
+    if (onColorChange) onColorChange(newColor);
+    setBotStarted(false);
+  }
+
+  async function handleBotStart() {
+    if (!trainingMode || !targetUser || botStarted) return;
+    setBotStarted(true);
+    await handleBotMove(game);
+  }
+
   function onSquareClick(square) {
     if (thinking) return;
+    // If playing as black, only allow moves when it's black's turn
+    if (playerColor === "black" && game.turn() === "w") return;
+    // If playing as white, only allow moves when it's white's turn
+    if (playerColor === "white" && game.turn() === "b") return;
 
     if (moveFrom) {
       const gameCopy = new Chess(game.fen());
@@ -100,6 +118,9 @@ export default function Board({ targetUser }) {
 
   const onDrop = useCallback(async (sourceSquare, targetSquare) => {
     if (thinking) return false;
+    if (playerColor === "black" && game.turn() === "w") return false;
+    if (playerColor === "white" && game.turn() === "b") return false;
+
     const gameCopy = new Chess(game.fen());
     let move = null;
     try { move = gameCopy.move({ from: sourceSquare, to: targetSquare }); }
@@ -117,7 +138,7 @@ export default function Board({ targetUser }) {
     setStatus(getStatus(gameCopy));
     if (!gameCopy.isGameOver()) handleBotMove(gameCopy);
     return true;
-  }, [game, trainingMode, targetUser, thinking]);
+  }, [game, trainingMode, targetUser, thinking, playerColor]);
 
   async function handleBotMove(currentGame) {
     if (!trainingMode || !targetUser) return;
@@ -155,6 +176,7 @@ export default function Board({ targetUser }) {
     setMoveFrom(null);
     setOptionSquares({});
     setLastMove(null);
+    setBotStarted(false);
   }
 
   function kingSquare() {
@@ -174,17 +196,18 @@ export default function Board({ targetUser }) {
   }
 
   const customSquareStyles = { ...optionSquares, ...kingSquare() };
+  const showStartButton = trainingMode && targetUser && playerColor === "black" && !botStarted && game.fen() === new Chess().fen();
 
   return (
     <div className="board-panel card">
       <div className="board-controls">
         <button className="ctrl-btn" onClick={resetGame}>↺ Reset</button>
-        <button className="ctrl-btn" onClick={() => setPlayerColor(c => c === "white" ? "black" : "white")}>⇅ Flip</button>
+        <button className="ctrl-btn" onClick={flipBoard}>⇅ Flip</button>
         <label className={`toggle-label ${trainingMode ? "active-train" : ""}`}>
           <input
             type="checkbox"
             checked={trainingMode}
-            onChange={e => setTrainingMode(e.target.checked)}
+            onChange={e => { setTrainingMode(e.target.checked); setBotStarted(false); }}
             disabled={!targetUser}
           />
           {targetUser ? `Train vs ${targetUser}` : "Analyze a user first"}
@@ -203,6 +226,12 @@ export default function Board({ targetUser }) {
         customLightSquareStyle={{ backgroundColor: "#f0d9b5" }}
         arePiecesDraggable={!thinking}
       />
+
+      {showStartButton && (
+        <button className="start-btn" onClick={handleBotStart}>
+          ▶ Start — Let {targetUser} play first
+        </button>
+      )}
 
       <div className={`board-status ${game.isCheck() ? "check" : thinking ? "thinking" : ""}`}>
         {status}

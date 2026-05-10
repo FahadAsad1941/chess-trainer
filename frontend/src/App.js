@@ -10,6 +10,7 @@ export default function App() {
   const [targetUser, setTargetUser] = useState(null);
   const [analysisData, setAnalysisData] = useState(null);
   const [activeTab, setActiveTab] = useState("train");
+  const [playerColor, setPlayerColor] = useState("white");
 
   return (
     <div className="app">
@@ -33,12 +34,16 @@ export default function App() {
         {activeTab === "train" ? (
           <div className="train-layout">
             <div className="train-top">
-              <Board targetUser={targetUser} />
+              <Board targetUser={targetUser} onColorChange={setPlayerColor} />
               <div className="chat-col">
                 <Chatbot targetUser={targetUser} />
               </div>
             </div>
-            <OpeningRecommendations targetUser={targetUser} analysisData={analysisData} />
+            <OpeningRecommendations
+              targetUser={targetUser}
+              analysisData={analysisData}
+              playerColor={playerColor}
+            />
           </div>
         ) : (
           <Analysis data={analysisData} targetUser={targetUser} />

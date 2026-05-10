@@ -19,12 +19,21 @@ export default function UsernameBar({ onAnalyzed }) {
       const { data } = await axios.post("/api/analyze", {
         username: input.trim(),
         max_games: 50,
+      }, {
+        timeout: 15000, // 15 second timeout — stops spinning forever
       });
       setSuccess(`✓ ${data.total_games} games loaded`);
       onAnalyzed(input.trim(), data);
     } catch (err) {
-      const msg = err.response?.data?.error || "Could not fetch games. Check the username and make sure the backend is running.";
-      setError(msg);
+      if (err.code === "ECONNABORTED") {
+        setError("Request timed out. Check your connection and try again.");
+      } else if (err.response?.status === 404) {
+        setError(`❌ "${input.trim()}" not found on Chess.com. Check the username and try again.`);
+      } else if (err.response?.status === 500) {
+        setError("Server error. Please try again in a moment.");
+      } else {
+        setError(err.response?.data?.error || "Could not fetch games. Check the username and try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -41,7 +50,9 @@ export default function UsernameBar({ onAnalyzed }) {
         disabled={loading}
       />
       <button className="analyze-btn" type="submit" disabled={loading}>
-        {loading ? "Analyzing…" : "Analyze"}
+        {loading ? (
+          <span>Analyzing… <span className="spinner">⏳</span></span>
+        ) : "Analyze"}
       </button>
       {error && <span className="username-error">{error}</span>}
       {success && <span className="username-success">{success}</span>}

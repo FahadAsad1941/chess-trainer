@@ -4,7 +4,7 @@ import { Chess } from "chess.js";
 import axios from "axios";
 import "./OpeningRecommendations.css";
 
-export default function OpeningRecommendations({ targetUser, analysisData }) {
+export default function OpeningRecommendations({ targetUser, analysisData, playerColor }) {
   const [recommendations, setRecommendations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [boardStates, setBoardStates] = useState({});
@@ -14,7 +14,7 @@ export default function OpeningRecommendations({ targetUser, analysisData }) {
     if (!targetUser || !analysisData) return;
     fetchRecommendations();
     return () => Object.values(intervalsRef.current).forEach(clearInterval);
-  }, [targetUser]);
+  }, [targetUser, playerColor]);
 
   async function fetchRecommendations() {
     setLoading(true);
@@ -24,6 +24,7 @@ export default function OpeningRecommendations({ targetUser, analysisData }) {
       const res = await axios.post("/api/recommend-openings", {
         username: targetUser,
         opening_stats: analysisData.opening_stats,
+        player_color: playerColor,
       });
       const recs = res.data.recommendations;
       setRecommendations(recs);
@@ -40,7 +41,6 @@ export default function OpeningRecommendations({ targetUser, analysisData }) {
   }
 
   function getMoves(moves_str) {
-    // Parse "1.e4 e5 2.Nf3 Nc6" -> ["e4","e5","Nf3","Nc6"]
     return moves_str
       .trim()
       .replace(/\d+\./g, " ")
@@ -53,11 +53,7 @@ export default function OpeningRecommendations({ targetUser, analysisData }) {
     const moves = getMoves(moves_str);
     const g = new Chess();
     for (let i = 0; i < moveIndex && i < moves.length; i++) {
-      try {
-        g.move(moves[i]);
-      } catch (_) {
-        break;
-      }
+      try { g.move(moves[i]); } catch (_) { break; }
     }
     return g.fen();
   }
@@ -100,7 +96,6 @@ export default function OpeningRecommendations({ targetUser, analysisData }) {
     const moves = getMoves(moves_str);
     let current = boardStates[index]?.moveIndex || 0;
 
-    // If already at end, reset first
     if (current >= moves.length) {
       current = 0;
       setMoveIndex(index, 0, moves_str);
@@ -124,7 +119,9 @@ export default function OpeningRecommendations({ targetUser, analysisData }) {
 
   return (
     <div className="recommendations-section">
-      <div className="rec-title">🎯 Recommended Openings vs {targetUser}</div>
+      <div className="rec-title">
+        🎯 Recommended Openings vs {targetUser} — playing as {playerColor === "black" ? "⬛ Black" : "⬜ White"}
+      </div>
       {loading && <div className="rec-loading">AI is analyzing weaknesses…</div>}
       {recommendations.map((rec, i) => {
         const moves = getMoves(rec.moves);
@@ -132,13 +129,13 @@ export default function OpeningRecommendations({ targetUser, analysisData }) {
         return (
           <div className="rec-card" key={i}>
 
-            {/* LEFT: number + board + controls */}
             <div className="rec-board-col">
               <div className="rec-number">#{i + 1} RECOMMENDATION</div>
               <Chessboard
                 position={cur?.fen || "start"}
                 arePiecesDraggable={false}
                 boardWidth={300}
+                boardOrientation={playerColor}
                 customDarkSquareStyle={{ backgroundColor: "#4a7c59" }}
                 customLightSquareStyle={{ backgroundColor: "#f0d9b5" }}
                 customBoardStyle={{ borderRadius: "6px", overflow: "hidden" }}
@@ -154,7 +151,6 @@ export default function OpeningRecommendations({ targetUser, analysisData }) {
               </div>
             </div>
 
-            {/* MIDDLE: name + moves + description */}
             <div className="rec-center-col">
               <div className="rec-name">{rec.name}</div>
               <div className="rec-moves">{rec.moves}</div>

@@ -33,3 +33,20 @@
 }
 .board-status.check { color: #e24b4a; border-color: #e24b4a44; }
 .board-status.thinking { color: #c8b86a; }
+
+.start-btn {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #c8b86a;
+  background: rgba(200,184,106,0.12);
+  color: #c8b86a;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+.start-btn:hover {
+  background: rgba(200,184,106,0.25);
+  box-shadow: 0 0 12px rgba(200,184,106,0.2);
+}

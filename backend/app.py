@@ -108,6 +108,7 @@ def recommend_openings():
     data = request.json
     username = data.get("username", "")
     opening_stats = data.get("opening_stats", [])
+    player_color = data.get("player_color", "white")
 
     weak = [o for o in opening_stats if o["win_rate"] < 45 and o["total"] >= 2]
     weak_summary = "\n".join([
@@ -118,10 +119,16 @@ def recommend_openings():
     if not weak_summary:
         weak_summary = "No clear weaknesses found, recommend solid universal openings."
 
-    prompt = f"""You are a chess coach. The player {username} struggles against these openings:
+    if player_color == "black":
+        color_instruction = f"The user is playing as BLACK against {username} who plays WHITE. Recommend 3 defenses for BLACK to use against {username}'s white openings."
+    else:
+        color_instruction = f"The user is playing as WHITE against {username} who plays BLACK. Recommend 3 openings for WHITE to exploit {username}'s weaknesses as black."
+
+    prompt = f"""You are a chess coach. {color_instruction}
+
+{username}'s weak openings:
 {weak_summary}
 
-Recommend exactly 3 openings to play AGAINST {username} to exploit their weaknesses.
 Respond ONLY with valid JSON array, no markdown, no explanation:
 [
   {{
