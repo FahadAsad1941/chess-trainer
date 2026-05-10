@@ -1,0 +1,35 @@
+.board-panel { display: flex; flex-direction: column; gap: 12px; }
+
+.board-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.ctrl-btn {
+  padding: 6px 14px; border-radius: 7px;
+  border: 1px solid #2a2a35; background: #1a1a24;
+  color: #888; cursor: pointer; font-size: 12px;
+  transition: all 0.15s;
+}
+.ctrl-btn:hover { border-color: #444; color: #ccc; background: #222230; }
+
+.toggle-label {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; color: #666; cursor: pointer; user-select: none;
+  margin-left: auto;
+  padding: 5px 12px; border-radius: 7px;
+  border: 1px solid #2a2a35; background: #1a1a24;
+  transition: all 0.15s;
+}
+.toggle-label:hover { border-color: #444; color: #aaa; }
+.toggle-label input { accent-color: #c8b86a; }
+.toggle-label.active-train {
+  border-color: #c8b86a55; color: #c8b86a;
+  background: rgba(200,184,106,0.08);
+}
+
+.board-status {
+  text-align: center; font-size: 12px; color: #666;
+  padding: 7px; background: #0a0a0f;
+  border-radius: 7px; border: 1px solid #1e1e2a;
+  letter-spacing: 0.02em;
+}
+.board-status.check { color: #e24b4a; border-color: #e24b4a44; }
+.board-status.thinking { color: #c8b86a; }

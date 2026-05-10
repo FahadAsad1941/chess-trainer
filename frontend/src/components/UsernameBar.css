@@ -1,0 +1,25 @@
+.username-bar { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 200px; flex-wrap: wrap; }
+
+.username-input {
+  flex: 1; min-width: 180px;
+  padding: 8px 14px; border-radius: 8px;
+  border: 1px solid #2a2a35; background: #0a0a0f;
+  color: #e8e6e0; outline: none; font-size: 13px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.username-input:focus { border-color: #c8b86a; box-shadow: 0 0 0 3px rgba(200,184,106,0.1); }
+.username-input::placeholder { color: #444; }
+
+.analyze-btn {
+  padding: 8px 18px; border-radius: 8px;
+  border: 1px solid #c8b86a;
+  background: linear-gradient(135deg, rgba(200,184,106,0.2), rgba(200,184,106,0.1));
+  color: #c8b86a; cursor: pointer; white-space: nowrap;
+  font-size: 13px; font-weight: 500;
+  transition: all 0.15s;
+}
+.analyze-btn:hover:not(:disabled) { background: rgba(200,184,106,0.3); box-shadow: 0 0 12px rgba(200,184,106,0.2); }
+.analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.username-error { font-size: 12px; color: #e24b4a; width: 100%; }
+.username-success { font-size: 12px; color: #4caf82; width: 100%; }

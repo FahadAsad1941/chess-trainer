@@ -1,0 +1,59 @@
+.chat-panel { display: flex; flex-direction: column; height: 580px; }
+
+.chat-header {
+  font-size: 14px; font-weight: 600; color: #c8b86a;
+  margin-bottom: 12px; padding-bottom: 10px;
+  border-bottom: 1px solid #1e1e2a;
+  display: flex; align-items: center; gap: 8px;
+}
+.chat-user { font-weight: 400; color: #555; font-size: 12px; }
+
+.chat-messages {
+  flex: 1; overflow-y: auto; display: flex;
+  flex-direction: column; gap: 10px; padding-right: 2px;
+}
+
+.msg { display: flex; }
+.msg.user { justify-content: flex-end; }
+.msg.assistant { justify-content: flex-start; }
+
+.msg-bubble {
+  max-width: 84%; padding: 10px 14px;
+  border-radius: 12px; font-size: 13px;
+  line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+}
+.msg.user .msg-bubble {
+  background: linear-gradient(135deg, rgba(200,184,106,0.2), rgba(200,184,106,0.12));
+  border: 1px solid rgba(200,184,106,0.3);
+  color: #e8e6e0; border-radius: 12px 12px 2px 12px;
+}
+.msg.assistant .msg-bubble {
+  background: #1a1a24; border: 1px solid #2a2a35;
+  color: #c8c6c0; border-radius: 12px 12px 12px 2px;
+}
+.typing { color: #555 !important; font-style: italic; }
+
+.chat-input-row {
+  display: flex; gap: 8px; margin-top: 12px;
+  padding-top: 12px; border-top: 1px solid #1e1e2a;
+  align-items: flex-end;
+}
+.chat-input {
+  flex: 1; padding: 9px 13px; border-radius: 8px;
+  border: 1px solid #2a2a35; background: #0a0a0f;
+  color: #e8e6e0; resize: none; outline: none;
+  line-height: 1.5; font-size: 13px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.chat-input:focus { border-color: #c8b86a; box-shadow: 0 0 0 3px rgba(200,184,106,0.08); }
+.chat-input::placeholder { color: #444; }
+
+.send-btn {
+  padding: 9px 18px; border-radius: 8px;
+  border: 1px solid #c8b86a;
+  background: linear-gradient(135deg, rgba(200,184,106,0.2), rgba(200,184,106,0.1));
+  color: #c8b86a; cursor: pointer; font-size: 13px; font-weight: 500;
+  transition: all 0.15s; align-self: flex-end;
+}
+.send-btn:hover:not(:disabled) { background: rgba(200,184,106,0.3); box-shadow: 0 0 12px rgba(200,184,106,0.15); }
+.send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
