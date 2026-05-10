@@ -14,6 +14,10 @@ export default function Board({ targetUser, onColorChange }) {
   const [optionSquares, setOptionSquares] = useState({});
   const [lastMove, setLastMove] = useState(null);
   const [botStarted, setBotStarted] = useState(false);
+  const [moveHistory, setMoveHistory] = useState([]);
+  const [analysis, setAnalysis] = useState(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [resigned, setResigned] = useState(false);
 
   function playSound() {
     try {
@@ -62,6 +66,7 @@ export default function Board({ targetUser, onColorChange }) {
     setPlayerColor(newColor);
     if (onColorChange) onColorChange(newColor);
     setBotStarted(false);
+    setAnalysis(null);
   }
 
   async function handleBotStart() {
@@ -70,11 +75,40 @@ export default function Board({ targetUser, onColorChange }) {
     await handleBotMove(game);
   }
 
+  function resign() {
+    if (resigned || game.isGameOver()) return;
+    setResigned(true);
+    setStatus(`You resigned. ${targetUser || "Opponent"} wins!`);
+    setAnalysis(null);
+  }
+
+  async function analyzeGame() {
+    if (moveHistory.length === 0) return;
+    setAnalysisLoading(true);
+    setAnalysis(null);
+    try {
+      const res = await axios.post("/api/chat", {
+        username: targetUser || "",
+        messages: [
+          {
+            role: "user",
+            content: `Analyze this chess game I just played. Here are the moves in order: ${moveHistory.join(", ")}. 
+I was playing as ${playerColor}${targetUser ? ` against a bot simulating ${targetUser}` : ""}. 
+Give me: 1) Key mistakes I made, 2) Good moves I played, 3) What I should improve. Keep it concise.`
+          }
+        ]
+      });
+      setAnalysis(res.data.reply);
+    } catch (err) {
+      setAnalysis("Could not analyze game. Try again.");
+    } finally {
+      setAnalysisLoading(false);
+    }
+  }
+
   function onSquareClick(square) {
-    if (thinking) return;
-    // If playing as black, only allow moves when it's black's turn
+    if (thinking || resigned || game.isGameOver()) return;
     if (playerColor === "black" && game.turn() === "w") return;
-    // If playing as white, only allow moves when it's white's turn
     if (playerColor === "white" && game.turn() === "b") return;
 
     if (moveFrom) {
@@ -90,6 +124,7 @@ export default function Board({ targetUser, onColorChange }) {
         playSound();
         setLastMove({ from: moveFrom, to: square });
         setGame(gameCopy);
+        setMoveHistory(prev => [...prev, move.san]);
         setMoveFrom(null);
         setOptionSquares({});
         setStatus(getStatus(gameCopy));
@@ -117,7 +152,7 @@ export default function Board({ targetUser, onColorChange }) {
   }
 
   const onDrop = useCallback(async (sourceSquare, targetSquare) => {
-    if (thinking) return false;
+    if (thinking || resigned || game.isGameOver()) return false;
     if (playerColor === "black" && game.turn() === "w") return false;
     if (playerColor === "white" && game.turn() === "b") return false;
 
@@ -135,13 +170,16 @@ export default function Board({ targetUser, onColorChange }) {
     setMoveFrom(null);
     setOptionSquares({});
     setGame(gameCopy);
+    setMoveHistory(prev => [...prev, move.san]);
     setStatus(getStatus(gameCopy));
     if (!gameCopy.isGameOver()) handleBotMove(gameCopy);
     return true;
-  }, [game, trainingMode, targetUser, thinking, playerColor]);
+  }, [game, trainingMode, targetUser, thinking, playerColor, resigned]);
 
   async function handleBotMove(currentGame) {
     if (!trainingMode || !targetUser) return;
+    const botTurn = playerColor === "white" ? "b" : "w";
+    if (currentGame.turn() !== botTurn) return;
     setThinking(true);
     setStatus("Bot thinking…");
     try {
@@ -155,10 +193,11 @@ export default function Board({ targetUser, onColorChange }) {
         const to = data.move.slice(2, 4);
         const promo = data.move[4] || "q";
         try {
-          botGame.move({ from, to, promotion: promo });
+          const botMove = botGame.move({ from, to, promotion: promo });
           playSound();
           setLastMove({ from, to });
           setGame(botGame);
+          if (botMove) setMoveHistory(prev => [...prev, botMove.san]);
           setStatus(getStatus(botGame));
         } catch (_) {}
       }
@@ -177,6 +216,9 @@ export default function Board({ targetUser, onColorChange }) {
     setOptionSquares({});
     setLastMove(null);
     setBotStarted(false);
+    setMoveHistory([]);
+    setAnalysis(null);
+    setResigned(false);
   }
 
   function kingSquare() {
@@ -196,17 +238,27 @@ export default function Board({ targetUser, onColorChange }) {
   }
 
   const customSquareStyles = { ...optionSquares, ...kingSquare() };
-  const showStartButton = trainingMode && targetUser && playerColor === "black" && !botStarted;
+  const showStartButton = trainingMode && targetUser && playerColor === "black" && !botStarted && !resigned && !game.isGameOver();
+  const gameOver = game.isGameOver() || resigned;
+
   return (
     <div className="board-panel card">
       <div className="board-controls">
         <button className="ctrl-btn" onClick={resetGame}>↺ Reset</button>
         <button className="ctrl-btn" onClick={flipBoard}>⇅ Flip</button>
+        {trainingMode && !gameOver && (
+          <button className="ctrl-btn resign-btn" onClick={resign}>🏳 Resign</button>
+        )}
+        {moveHistory.length > 0 && (
+          <button className="ctrl-btn analyze-btn-ctrl" onClick={analyzeGame} disabled={analysisLoading}>
+            {analysisLoading ? "Analyzing…" : "🔍 Analyze Game"}
+          </button>
+        )}
         <label className={`toggle-label ${trainingMode ? "active-train" : ""}`}>
           <input
             type="checkbox"
             checked={trainingMode}
-            onChange={e => { setTrainingMode(e.target.checked); setBotStarted(false); }}
+            onChange={e => { setTrainingMode(e.target.checked); setBotStarted(false); setAnalysis(null); }}
             disabled={!targetUser}
           />
           {targetUser ? `Train vs ${targetUser}` : "Analyze a user first"}
@@ -223,18 +275,35 @@ export default function Board({ targetUser, onColorChange }) {
         customBoardStyle={{ borderRadius: "6px", overflow: "hidden" }}
         customDarkSquareStyle={{ backgroundColor: "#4a7c59" }}
         customLightSquareStyle={{ backgroundColor: "#f0d9b5" }}
-        arePiecesDraggable={!thinking}
+        arePiecesDraggable={!thinking && !resigned && !game.isGameOver()}
       />
 
       {showStartButton && (
         <button className="start-btn" onClick={handleBotStart}>
-          ▶ Start — Let {targetUser} play first
+          ▶ Start — Let {targetUser} play first as White
         </button>
       )}
 
       <div className={`board-status ${game.isCheck() ? "check" : thinking ? "thinking" : ""}`}>
         {status}
       </div>
+
+      {moveHistory.length > 0 && (
+        <div className="move-history">
+          {moveHistory.map((m, i) => (
+            <span key={i} className="move-token">
+              {i % 2 === 0 && <span className="move-num">{Math.floor(i/2)+1}.</span>}{m}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {analysis && (
+        <div className="game-analysis">
+          <div className="analysis-header">🔍 Game Analysis</div>
+          <div className="analysis-text">{analysis}</div>
+        </div>
+      )}
     </div>
   );
 }

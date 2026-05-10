@@ -50,3 +50,74 @@
   background: rgba(200,184,106,0.25);
   box-shadow: 0 0 12px rgba(200,184,106,0.2);
 }
+.start-btn {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #c8b86a;
+  background: rgba(200,184,106,0.12);
+  color: #c8b86a;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+.start-btn:hover {
+  background: rgba(200,184,106,0.25);
+  box-shadow: 0 0 12px rgba(200,184,106,0.2);
+}
+
+.resign-btn {
+  color: #e24b4a !important;
+  border-color: #e24b4a !important;
+}
+.resign-btn:hover {
+  background: rgba(226,75,74,0.15) !important;
+}
+
+.analyze-btn-ctrl {
+  color: #4caf82 !important;
+  border-color: #4caf82 !important;
+}
+.analyze-btn-ctrl:hover {
+  background: rgba(76,175,130,0.15) !important;
+}
+
+.move-history {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px;
+  background: #0a0a0f;
+  border-radius: 7px;
+  border: 1px solid #1e1e2a;
+  font-size: 11px;
+  max-height: 80px;
+  overflow-y: auto;
+}
+.move-token {
+  color: #aaa;
+}
+.move-num {
+  color: #555;
+  margin-right: 2px;
+}
+
+.game-analysis {
+  background: #0a0a0f;
+  border: 1px solid #4caf82;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 12px;
+}
+.analysis-header {
+  color: #4caf82;
+  font-weight: 600;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.analysis-text {
+  color: #aaa;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
