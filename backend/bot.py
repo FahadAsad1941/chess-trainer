@@ -1,17 +1,77 @@
 import random
 import chess
 import chess.pgn
+import numpy as np
+import os
 from collections import defaultdict
 
+# ── Stockfish (primary engine) ─────────────────────────────────────────────
+_stockfish = None
 
+def _load_stockfish():
+    global _stockfish
+    try:
+        from stockfish import Stockfish
+        # Railway installs stockfish binary here via nixpacks
+        paths = [
+            "/usr/games/stockfish",
+            "/usr/bin/stockfish",
+            "/usr/local/bin/stockfish",
+            "stockfish",  # if it's on PATH
+        ]
+        for path in paths:
+            try:
+                _stockfish = Stockfish(path=path, depth=15)
+                print(f"Stockfish loaded from: {path}")
+                return True
+            except Exception:
+                continue
+        print("Stockfish binary not found, falling back to minimax")
+        return False
+    except ImportError:
+        print("stockfish package not installed, falling back to minimax")
+        return False
+
+_load_stockfish()
+
+# ── Neural network (secondary fallback) ────────────────────────────────────
+_model = None
+try:
+    import tensorflow as tf
+    MODEL_PATH = os.path.join(os.path.dirname(__file__), "chess_model.h5")
+    if os.path.exists(MODEL_PATH):
+        _model = tf.keras.models.load_model(MODEL_PATH)
+        print("Neural network loaded successfully")
+    else:
+        print("No model found, will use minimax")
+except Exception as e:
+    print(f"Could not load neural network: {e}")
+
+
+# ── Board encoding for neural network ──────────────────────────────────────
+def board_to_tensor(board):
+    tensor = np.zeros(768, dtype=np.float32)
+    piece_idx = {
+        (chess.PAWN, True): 0,   (chess.KNIGHT, True): 1,
+        (chess.BISHOP, True): 2,  (chess.ROOK, True): 3,
+        (chess.QUEEN, True): 4,   (chess.KING, True): 5,
+        (chess.PAWN, False): 6,   (chess.KNIGHT, False): 7,
+        (chess.BISHOP, False): 8, (chess.ROOK, False): 9,
+        (chess.QUEEN, False): 10, (chess.KING, False): 11,
+    }
+    for sq, piece in board.piece_map().items():
+        idx = piece_idx[(piece.piece_type, piece.color == chess.WHITE)]
+        tensor[idx * 64 + sq] = 1.0
+    return tensor
+
+
+# ── Opening book ────────────────────────────────────────────────────────────
 def build_opening_book(games, username, max_depth=15):
     book = defaultdict(lambda: defaultdict(int))
-
     for game in games:
         board = game.board()
         white = game.headers.get("White", "").lower()
         player_is_white = white == username.lower()
-
         for i, move in enumerate(game.mainline_moves()):
             if i >= max_depth:
                 break
@@ -21,12 +81,11 @@ def build_opening_book(games, username, max_depth=15):
                 fen = " ".join(board.fen().split()[:4])
                 book[fen][move.uci()] += 1
             board.push(move)
-
     return {fen: dict(moves) for fen, moves in book.items()}
 
 
+# ── ELO estimation ──────────────────────────────────────────────────────────
 def estimate_elo(games, username):
-    """Estimate player ELO from game headers."""
     elos = []
     for game in games:
         white = game.headers.get("White", "").lower()
@@ -36,21 +95,35 @@ def estimate_elo(games, username):
             elo = game.headers.get("BlackElo", None)
         if elo and str(elo).isdigit():
             elos.append(int(elo))
-    if elos:
-        return int(sum(elos) / len(elos))
-    return 1200
+    return int(sum(elos) / len(elos)) if elos else 1200
 
 
+# ── ELO → Stockfish skill level mapping ────────────────────────────────────
+def _elo_to_stockfish_skill(elo):
+    """
+    Stockfish skill level 0-20.
+    Maps ELO roughly: 400=0, 800=3, 1000=5, 1200=8, 1500=12, 1800=16, 2000=18, 2500+=20
+    Also returns error_rate for occasional random moves (simulates human blunders).
+    """
+    if elo < 600:   return 0,  0.30
+    elif elo < 800:  return 2,  0.20
+    elif elo < 1000: return 4,  0.12
+    elif elo < 1200: return 6,  0.08
+    elif elo < 1400: return 8,  0.05
+    elif elo < 1600: return 11, 0.03
+    elif elo < 1800: return 14, 0.015
+    elif elo < 2000: return 16, 0.008
+    elif elo < 2200: return 18, 0.003
+    elif elo < 2500: return 19, 0.001
+    else:            return 20, 0.0
+
+
+# ── PST fallback engine ─────────────────────────────────────────────────────
 PIECE_VALUES = {
-    chess.PAWN: 100,
-    chess.KNIGHT: 320,
-    chess.BISHOP: 330,
-    chess.ROOK: 500,
-    chess.QUEEN: 900,
-    chess.KING: 20000,
+    chess.PAWN: 100, chess.KNIGHT: 320, chess.BISHOP: 330,
+    chess.ROOK: 500, chess.QUEEN: 900, chess.KING: 20000,
 }
 
-# Piece-square tables from White's perspective (a1=index 0, h8=index 63)
 PST = {
     chess.PAWN: [
          0,  0,  0,  0,  0,  0,  0,  0,
@@ -114,41 +187,102 @@ PST = {
     ],
 }
 
-
 def _pst(piece_type, square, is_white):
-    table = PST.get(piece_type, [0] * 64)
-    # White uses square index directly (a1=0), black mirrors vertically
+    table = PST.get(piece_type, [0]*64)
     idx = square if is_white else chess.square_mirror(square)
     return table[idx]
 
-
-def _evaluate(board):
-    """Static evaluation in centipawns from White's perspective."""
+def _evaluate_pst(board):
     if board.is_checkmate():
         return -99999 if board.turn == chess.WHITE else 99999
     if board.is_stalemate() or board.is_insufficient_material():
         return 0
-
     score = 0
     for sq, piece in board.piece_map().items():
         val = PIECE_VALUES.get(piece.piece_type, 0) + _pst(piece.piece_type, sq, piece.color == chess.WHITE)
         score += val if piece.color == chess.WHITE else -val
     return score
 
+def _evaluate(board):
+    if _model is not None:
+        if board.is_checkmate():
+            return -99999 if board.turn == chess.WHITE else 99999
+        if board.is_stalemate() or board.is_insufficient_material():
+            return 0
+        tensor = board_to_tensor(board).reshape(1, 768)
+        score = float(_model.predict(tensor, verbose=0)[0][0])
+        return score * 3000
+    return _evaluate_pst(board)
+
+
+# ── Quiescence search — prevents hanging pieces ─────────────────────────────
+def _quiescence(board, alpha, beta, maximizing, depth=4):
+    """Search captures only until position is quiet. Prevents horizon effect."""
+    stand_pat = _evaluate(board)
+    if maximizing:
+        if stand_pat >= beta:
+            return beta
+        alpha = max(alpha, stand_pat)
+    else:
+        if stand_pat <= alpha:
+            return alpha
+        beta = min(beta, stand_pat)
+
+    if depth == 0:
+        return stand_pat
+
+    # Only look at captures
+    captures = [m for m in board.legal_moves if board.is_capture(m)]
+    # Order by MVV-LVA (Most Valuable Victim - Least Valuable Attacker)
+    captures.sort(key=lambda m: (
+        PIECE_VALUES.get(board.piece_at(m.to_square).piece_type if board.piece_at(m.to_square) else chess.PAWN, 0) -
+        PIECE_VALUES.get(board.piece_at(m.from_square).piece_type if board.piece_at(m.from_square) else chess.PAWN, 0)
+    ), reverse=True)
+
+    for move in captures:
+        board.push(move)
+        score = _quiescence(board, alpha, beta, not maximizing, depth - 1)
+        board.pop()
+        if maximizing:
+            alpha = max(alpha, score)
+            if alpha >= beta:
+                return beta
+        else:
+            beta = min(beta, score)
+            if beta <= alpha:
+                return alpha
+
+    return alpha if maximizing else beta
+
+
+# ── Minimax with alpha-beta + quiescence ───────────────────────────────────
+def _move_score(board, move):
+    """Score move for ordering: captures > checks > quiet moves."""
+    score = 0
+    if board.is_capture(move):
+        victim = board.piece_at(move.to_square)
+        attacker = board.piece_at(move.from_square)
+        if victim and attacker:
+            score += 10 * PIECE_VALUES.get(victim.piece_type, 0) - PIECE_VALUES.get(attacker.piece_type, 0)
+    board.push(move)
+    if board.is_check():
+        score += 50
+    board.pop()
+    return score
 
 def _minimax(board, depth, alpha, beta, maximizing):
-    """Alpha-beta minimax search."""
-    if depth == 0 or board.is_game_over():
+    if board.is_game_over():
         return _evaluate(board)
+    if depth == 0:
+        return _quiescence(board, alpha, beta, maximizing)
 
-    # Captures first for better pruning
-    moves = sorted(board.legal_moves, key=lambda m: board.is_capture(m), reverse=True)
+    moves = sorted(board.legal_moves, key=lambda m: _move_score(board, m), reverse=True)
 
     if maximizing:
         best = -999999
         for move in moves:
             board.push(move)
-            best = max(best, _minimax(board, depth - 1, alpha, beta, False))
+            best = max(best, _minimax(board, depth-1, alpha, beta, False))
             board.pop()
             alpha = max(alpha, best)
             if beta <= alpha:
@@ -158,7 +292,7 @@ def _minimax(board, depth, alpha, beta, maximizing):
         best = 999999
         for move in moves:
             board.push(move)
-            best = min(best, _minimax(board, depth - 1, alpha, beta, True))
+            best = min(best, _minimax(board, depth-1, alpha, beta, True))
             board.pop()
             beta = min(beta, best)
             if beta <= alpha:
@@ -166,34 +300,26 @@ def _minimax(board, depth, alpha, beta, maximizing):
         return best
 
 
-def _elo_to_params(elo):
-    """Map ELO to (search_depth, blunder_rate)."""
-    if elo < 800:
-        return 1, 0.60
-    elif elo < 1000:
-        return 1, 0.40
-    elif elo < 1200:
-        return 2, 0.25
-    elif elo < 1400:
-        return 2, 0.15
-    elif elo < 1600:
-        return 2, 0.08
-    elif elo < 1800:
-        return 3, 0.04
-    elif elo < 2000:
-        return 3, 0.02
-    elif elo < 2200:
-        return 3, 0.01
-    elif elo < 2500:
-        return 4, 0.005
-    else:
-        return 4, 0.0   # Hikaru-level: full strength, no blunders
+# ── ELO → minimax params (used only if Stockfish unavailable) ──────────────
+def _elo_to_minimax_params(elo):
+    if elo < 800:    return 3, 0.35
+    elif elo < 1000: return 3, 0.20
+    elif elo < 1200: return 3, 0.10
+    elif elo < 1400: return 4, 0.06
+    elif elo < 1600: return 4, 0.03
+    elif elo < 1800: return 4, 0.015
+    elif elo < 2000: return 5, 0.008
+    elif elo < 2200: return 5, 0.003
+    elif elo < 2500: return 5, 0.001
+    else:            return 6, 0.0
 
 
+# ── Main move function ──────────────────────────────────────────────────────
 def get_bot_move(board, opening_book, stockfish_path=None, depth=None, elo=None):
     fen_key = " ".join(board.fen().split()[:4])
+    target_elo = max(400, min(elo or 1200, 3200))
 
-    # 1. Use opening book (player's actual moves from their games)
+    # 1. Opening book
     if fen_key in opening_book:
         moves = opening_book[fen_key]
         total = sum(moves.values())
@@ -206,23 +332,39 @@ def get_bot_move(board, opening_book, stockfish_path=None, depth=None, elo=None)
                 if move in board.legal_moves:
                     return uci_move
 
-    # 2. Minimax scaled to player's ELO (no Stockfish needed)
-    target_elo = max(400, min(elo or 1200, 3200))
-    search_depth, error_rate = _elo_to_params(target_elo)
-
     legal_moves = list(board.legal_moves)
     if not legal_moves:
         return None
 
-    # Occasionally blunder to simulate human error at lower ELOs
+    # 2. Stockfish (if available)
+    if _stockfish is not None:
+        try:
+            skill_level, error_rate = _elo_to_stockfish_skill(target_elo)
+
+            # Occasional blunder to simulate human error
+            if random.random() < error_rate:
+                return random.choice(legal_moves).uci()
+
+            _stockfish.set_skill_level(skill_level)
+            _stockfish.set_fen_position(board.fen())
+            best = _stockfish.get_best_move()
+            if best:
+                move = chess.Move.from_uci(best)
+                if move in board.legal_moves:
+                    return best
+        except Exception as e:
+            print(f"Stockfish error: {e}, falling back to minimax")
+
+    # 3. Minimax fallback (with quiescence search)
+    search_depth, error_rate = _elo_to_minimax_params(target_elo)
+
     if random.random() < error_rate:
         return random.choice(legal_moves).uci()
 
-    # Find best move via minimax
     maximizing = board.turn == chess.WHITE
     best_move = None
     best_score = -999999 if maximizing else 999999
-    random.shuffle(legal_moves)  # break ties randomly (more human-like)
+    random.shuffle(legal_moves)
 
     for move in legal_moves:
         board.push(move)
