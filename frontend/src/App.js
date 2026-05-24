@@ -15,18 +15,33 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <div className="logo">♞ Chess Trainer</div>
-        <UsernameBar onAnalyzed={(user, data) => { setTargetUser(user); setAnalysisData(data); }} />
+        <div className="logo">
+          <span className="logo-icon">♞</span>
+          <span>Chess Trainer</span>
+        </div>
+        <UsernameBar onAnalyzed={(user, data) => {
+          setTargetUser(user);
+          setAnalysisData(data);
+        }} />
         <div className="tabs">
-          <button className={activeTab === "train" ? "tab active" : "tab"} onClick={() => setActiveTab("train")}>⚔ Training</button>
-          <button className={activeTab === "analyze" ? "tab active" : "tab"} onClick={() => setActiveTab("analyze")}>📊 Analysis</button>
+          <button
+            className={activeTab === "train" ? "tab active" : "tab"}
+            onClick={() => setActiveTab("train")}
+          >⚔ Training</button>
+          <button
+            className={activeTab === "analyze" ? "tab active" : "tab"}
+            onClick={() => setActiveTab("analyze")}
+          >📊 Analysis</button>
         </div>
       </header>
 
       {targetUser && (
         <div className="player-banner">
-          Studying <span className="player-name">{targetUser}</span>
-          {analysisData && <span className="player-games"> · {analysisData.total_games} games analyzed</span>}
+          <span>Studying</span>
+          <span className="player-name">{targetUser}</span>
+          {analysisData && (
+            <span className="player-games">· {analysisData.total_games} games analyzed</span>
+          )}
         </div>
       )}
 
@@ -34,7 +49,10 @@ export default function App() {
         {activeTab === "train" ? (
           <div className="train-layout">
             <div className="train-top">
-              <Board targetUser={targetUser} onColorChange={setPlayerColor} />
+              <Board
+                targetUser={targetUser}
+                onColorChange={setPlayerColor}
+              />
               <div className="chat-col">
                 <Chatbot targetUser={targetUser} />
               </div>
@@ -50,7 +68,7 @@ export default function App() {
         )}
       </main>
 
-      <footer className="app-footer">Chess Trainer · AI Course Project</footer>
+      <footer className="app-footer">Chess Trainer · AI-Powered Preparation</footer>
     </div>
   );
 }
