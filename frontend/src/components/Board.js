@@ -92,8 +92,8 @@ export default function Board({ targetUser, onColorChange }) {
       const isCapture = g.get(m.to);
       squares[m.to] = {
         background: isCapture
-          ? "radial-gradient(circle, rgba(200,169,110,0.35) 60%, transparent 65%)"
-          : "radial-gradient(circle, rgba(200,169,110,0.25) 28%, transparent 32%)",
+          ? "radial-gradient(circle, rgba(255,0,0,0.5) 60%, transparent 65%)"
+          : "radial-gradient(circle, rgba(0,0,0,0.4) 28%, transparent 32%)",
         borderRadius: "50%",
       };
     });
