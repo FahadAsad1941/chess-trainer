@@ -275,7 +275,8 @@ Give me: 1) Key mistakes I made, 2) Good moves I played, 3) What I should improv
         customBoardStyle={{ borderRadius: "6px", overflow: "hidden" }}
         customDarkSquareStyle={{ backgroundColor: "#4a7c59" }}
         customLightSquareStyle={{ backgroundColor: "#f0d9b5" }}
-        arePiecesDraggable={!thinking && !resigned && !game.isGameOver()}
+        boardWidth={Math.min(480, window.innerWidth - 80)}
+          arePiecesDraggable={!thinking && !resigned && !game.isGameOver()}
       />
 
       {showStartButton && (
