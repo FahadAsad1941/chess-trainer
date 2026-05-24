@@ -1,24 +1,16 @@
 import random
 import chess
 import chess.pgn
-import numpy as np
 import os
 from collections import defaultdict
 
-# ── Stockfish (primary engine) ─────────────────────────────────────────────
 _stockfish = None
 
 def _load_stockfish():
     global _stockfish
     try:
         from stockfish import Stockfish
-        # Railway installs stockfish binary here via nixpacks
-        paths = [
-            "/usr/games/stockfish",
-            "/usr/bin/stockfish",
-            "/usr/local/bin/stockfish",
-            "stockfish",  # if it's on PATH
-        ]
+        paths = ["/usr/games/stockfish","/usr/bin/stockfish","/usr/local/bin/stockfish","stockfish"]
         for path in paths:
             try:
                 _stockfish = Stockfish(path=path, depth=15)
@@ -34,38 +26,6 @@ def _load_stockfish():
 
 _load_stockfish()
 
-# ── Neural network (secondary fallback) ────────────────────────────────────
-_model = None
-try:
-    import tensorflow as tf
-    MODEL_PATH = os.path.join(os.path.dirname(__file__), "chess_model.h5")
-    if os.path.exists(MODEL_PATH):
-        _model = tf.keras.models.load_model(MODEL_PATH)
-        print("Neural network loaded successfully")
-    else:
-        print("No model found, will use minimax")
-except Exception as e:
-    print(f"Could not load neural network: {e}")
-
-
-# ── Board encoding for neural network ──────────────────────────────────────
-def board_to_tensor(board):
-    tensor = np.zeros(768, dtype=np.float32)
-    piece_idx = {
-        (chess.PAWN, True): 0,   (chess.KNIGHT, True): 1,
-        (chess.BISHOP, True): 2,  (chess.ROOK, True): 3,
-        (chess.QUEEN, True): 4,   (chess.KING, True): 5,
-        (chess.PAWN, False): 6,   (chess.KNIGHT, False): 7,
-        (chess.BISHOP, False): 8, (chess.ROOK, False): 9,
-        (chess.QUEEN, False): 10, (chess.KING, False): 11,
-    }
-    for sq, piece in board.piece_map().items():
-        idx = piece_idx[(piece.piece_type, piece.color == chess.WHITE)]
-        tensor[idx * 64 + sq] = 1.0
-    return tensor
-
-
-# ── Opening book ────────────────────────────────────────────────────────────
 def build_opening_book(games, username, max_depth=15):
     book = defaultdict(lambda: defaultdict(int))
     for game in games:
@@ -83,8 +43,6 @@ def build_opening_book(games, username, max_depth=15):
             board.push(move)
     return {fen: dict(moves) for fen, moves in book.items()}
 
-
-# ── ELO estimation ──────────────────────────────────────────────────────────
 def estimate_elo(games, username):
     elos = []
     for game in games:
@@ -97,15 +55,8 @@ def estimate_elo(games, username):
             elos.append(int(elo))
     return int(sum(elos) / len(elos)) if elos else 1200
 
-
-# ── ELO → Stockfish skill level mapping ────────────────────────────────────
 def _elo_to_stockfish_skill(elo):
-    """
-    Stockfish skill level 0-20.
-    Maps ELO roughly: 400=0, 800=3, 1000=5, 1200=8, 1500=12, 1800=16, 2000=18, 2500+=20
-    Also returns error_rate for occasional random moves (simulates human blunders).
-    """
-    if elo < 600:   return 0,  0.30
+    if elo < 600:    return 0,  0.30
     elif elo < 800:  return 2,  0.20
     elif elo < 1000: return 4,  0.12
     elif elo < 1200: return 6,  0.08
@@ -117,147 +68,54 @@ def _elo_to_stockfish_skill(elo):
     elif elo < 2500: return 19, 0.001
     else:            return 20, 0.0
 
-
-# ── PST fallback engine ─────────────────────────────────────────────────────
-PIECE_VALUES = {
-    chess.PAWN: 100, chess.KNIGHT: 320, chess.BISHOP: 330,
-    chess.ROOK: 500, chess.QUEEN: 900, chess.KING: 20000,
-}
+PIECE_VALUES = {chess.PAWN:100,chess.KNIGHT:320,chess.BISHOP:330,chess.ROOK:500,chess.QUEEN:900,chess.KING:20000}
 
 PST = {
-    chess.PAWN: [
-         0,  0,  0,  0,  0,  0,  0,  0,
-         5, 10, 10,-20,-20, 10, 10,  5,
-         5, -5,-10,  0,  0,-10, -5,  5,
-         0,  0,  0, 20, 20,  0,  0,  0,
-         5,  5, 10, 25, 25, 10,  5,  5,
-        10, 10, 20, 30, 30, 20, 10, 10,
-        50, 50, 50, 50, 50, 50, 50, 50,
-         0,  0,  0,  0,  0,  0,  0,  0,
-    ],
-    chess.KNIGHT: [
-        -50,-40,-30,-30,-30,-30,-40,-50,
-        -40,-20,  0,  5,  5,  0,-20,-40,
-        -30,  5, 10, 15, 15, 10,  5,-30,
-        -30,  0, 15, 20, 20, 15,  0,-30,
-        -30,  5, 15, 20, 20, 15,  5,-30,
-        -30,  0, 10, 15, 15, 10,  0,-30,
-        -40,-20,  0,  0,  0,  0,-20,-40,
-        -50,-40,-30,-30,-30,-30,-40,-50,
-    ],
-    chess.BISHOP: [
-        -20,-10,-10,-10,-10,-10,-10,-20,
-        -10,  5,  0,  0,  0,  0,  5,-10,
-        -10, 10, 10, 10, 10, 10, 10,-10,
-        -10,  0, 10, 10, 10, 10,  0,-10,
-        -10,  5,  5, 10, 10,  5,  5,-10,
-        -10,  0,  5, 10, 10,  5,  0,-10,
-        -10,  0,  0,  0,  0,  0,  0,-10,
-        -20,-10,-10,-10,-10,-10,-10,-20,
-    ],
-    chess.ROOK: [
-         0,  0,  0,  5,  5,  0,  0,  0,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-         5, 10, 10, 10, 10, 10, 10,  5,
-         0,  0,  0,  0,  0,  0,  0,  0,
-    ],
-    chess.QUEEN: [
-        -20,-10,-10, -5, -5,-10,-10,-20,
-        -10,  0,  5,  0,  0,  0,  0,-10,
-        -10,  5,  5,  5,  5,  5,  0,-10,
-          0,  0,  5,  5,  5,  5,  0, -5,
-         -5,  0,  5,  5,  5,  5,  0, -5,
-        -10,  0,  5,  5,  5,  5,  0,-10,
-        -10,  0,  0,  0,  0,  0,  0,-10,
-        -20,-10,-10, -5, -5,-10,-10,-20,
-    ],
-    chess.KING: [
-         20, 30, 10,  0,  0, 10, 30, 20,
-         20, 20,  0,  0,  0,  0, 20, 20,
-        -10,-20,-20,-20,-20,-20,-20,-10,
-        -20,-30,-30,-40,-40,-30,-30,-20,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-    ],
+    chess.PAWN:[0,0,0,0,0,0,0,0,5,10,10,-20,-20,10,10,5,5,-5,-10,0,0,-10,-5,5,0,0,0,20,20,0,0,0,5,5,10,25,25,10,5,5,10,10,20,30,30,20,10,10,50,50,50,50,50,50,50,50,0,0,0,0,0,0,0,0],
+    chess.KNIGHT:[-50,-40,-30,-30,-30,-30,-40,-50,-40,-20,0,5,5,0,-20,-40,-30,5,10,15,15,10,5,-30,-30,0,15,20,20,15,0,-30,-30,5,15,20,20,15,5,-30,-30,0,10,15,15,10,0,-30,-40,-20,0,0,0,0,-20,-40,-50,-40,-30,-30,-30,-30,-40,-50],
+    chess.BISHOP:[-20,-10,-10,-10,-10,-10,-10,-20,-10,5,0,0,0,0,5,-10,-10,10,10,10,10,10,10,-10,-10,0,10,10,10,10,0,-10,-10,5,5,10,10,5,5,-10,-10,0,5,10,10,5,0,-10,-10,0,0,0,0,0,0,-10,-20,-10,-10,-10,-10,-10,-10,-20],
+    chess.ROOK:[0,0,0,5,5,0,0,0,-5,0,0,0,0,0,0,-5,-5,0,0,0,0,0,0,-5,-5,0,0,0,0,0,0,-5,-5,0,0,0,0,0,0,-5,-5,0,0,0,0,0,0,-5,5,10,10,10,10,10,10,5,0,0,0,0,0,0,0,0],
+    chess.QUEEN:[-20,-10,-10,-5,-5,-10,-10,-20,-10,0,5,0,0,0,0,-10,-10,5,5,5,5,5,0,-10,0,0,5,5,5,5,0,-5,-5,0,5,5,5,5,0,-5,-10,0,5,5,5,5,0,-10,-10,0,0,0,0,0,0,-10,-20,-10,-10,-5,-5,-10,-10,-20],
+    chess.KING:[20,30,10,0,0,10,30,20,20,20,0,0,0,0,20,20,-10,-20,-20,-20,-20,-20,-20,-10,-20,-30,-30,-40,-40,-30,-30,-20,-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30],
 }
 
 def _pst(piece_type, square, is_white):
     table = PST.get(piece_type, [0]*64)
-    idx = square if is_white else chess.square_mirror(square)
-    return table[idx]
+    return table[square if is_white else chess.square_mirror(square)]
 
 def _evaluate_pst(board):
-    if board.is_checkmate():
-        return -99999 if board.turn == chess.WHITE else 99999
-    if board.is_stalemate() or board.is_insufficient_material():
-        return 0
+    if board.is_checkmate(): return -99999 if board.turn == chess.WHITE else 99999
+    if board.is_stalemate() or board.is_insufficient_material(): return 0
     score = 0
     for sq, piece in board.piece_map().items():
         val = PIECE_VALUES.get(piece.piece_type, 0) + _pst(piece.piece_type, sq, piece.color == chess.WHITE)
         score += val if piece.color == chess.WHITE else -val
     return score
 
-def _evaluate(board):
-    if _model is not None:
-        if board.is_checkmate():
-            return -99999 if board.turn == chess.WHITE else 99999
-        if board.is_stalemate() or board.is_insufficient_material():
-            return 0
-        tensor = board_to_tensor(board).reshape(1, 768)
-        score = float(_model.predict(tensor, verbose=0)[0][0])
-        return score * 3000
-    return _evaluate_pst(board)
-
-
-# ── Quiescence search — prevents hanging pieces ─────────────────────────────
 def _quiescence(board, alpha, beta, maximizing, depth=4):
-    """Search captures only until position is quiet. Prevents horizon effect."""
-    stand_pat = _evaluate(board)
+    stand_pat = _evaluate_pst(board)
     if maximizing:
-        if stand_pat >= beta:
-            return beta
+        if stand_pat >= beta: return beta
         alpha = max(alpha, stand_pat)
     else:
-        if stand_pat <= alpha:
-            return alpha
+        if stand_pat <= alpha: return alpha
         beta = min(beta, stand_pat)
-
-    if depth == 0:
-        return stand_pat
-
-    # Only look at captures
+    if depth == 0: return stand_pat
     captures = [m for m in board.legal_moves if board.is_capture(m)]
-    # Order by MVV-LVA (Most Valuable Victim - Least Valuable Attacker)
-    captures.sort(key=lambda m: (
-        PIECE_VALUES.get(board.piece_at(m.to_square).piece_type if board.piece_at(m.to_square) else chess.PAWN, 0) -
-        PIECE_VALUES.get(board.piece_at(m.from_square).piece_type if board.piece_at(m.from_square) else chess.PAWN, 0)
-    ), reverse=True)
-
+    captures.sort(key=lambda m: PIECE_VALUES.get(board.piece_at(m.to_square).piece_type if board.piece_at(m.to_square) else chess.PAWN, 0), reverse=True)
     for move in captures:
         board.push(move)
-        score = _quiescence(board, alpha, beta, not maximizing, depth - 1)
+        score = _quiescence(board, alpha, beta, not maximizing, depth-1)
         board.pop()
         if maximizing:
             alpha = max(alpha, score)
-            if alpha >= beta:
-                return beta
+            if alpha >= beta: return beta
         else:
             beta = min(beta, score)
-            if beta <= alpha:
-                return alpha
-
+            if beta <= alpha: return alpha
     return alpha if maximizing else beta
 
-
-# ── Minimax with alpha-beta + quiescence ───────────────────────────────────
 def _move_score(board, move):
-    """Score move for ordering: captures > checks > quiet moves."""
     score = 0
     if board.is_capture(move):
         victim = board.piece_at(move.to_square)
@@ -265,19 +123,14 @@ def _move_score(board, move):
         if victim and attacker:
             score += 10 * PIECE_VALUES.get(victim.piece_type, 0) - PIECE_VALUES.get(attacker.piece_type, 0)
     board.push(move)
-    if board.is_check():
-        score += 50
+    if board.is_check(): score += 50
     board.pop()
     return score
 
 def _minimax(board, depth, alpha, beta, maximizing):
-    if board.is_game_over():
-        return _evaluate(board)
-    if depth == 0:
-        return _quiescence(board, alpha, beta, maximizing)
-
+    if board.is_game_over(): return _evaluate_pst(board)
+    if depth == 0: return _quiescence(board, alpha, beta, maximizing)
     moves = sorted(board.legal_moves, key=lambda m: _move_score(board, m), reverse=True)
-
     if maximizing:
         best = -999999
         for move in moves:
@@ -285,8 +138,7 @@ def _minimax(board, depth, alpha, beta, maximizing):
             best = max(best, _minimax(board, depth-1, alpha, beta, False))
             board.pop()
             alpha = max(alpha, best)
-            if beta <= alpha:
-                break
+            if beta <= alpha: break
         return best
     else:
         best = 999999
@@ -295,12 +147,9 @@ def _minimax(board, depth, alpha, beta, maximizing):
             best = min(best, _minimax(board, depth-1, alpha, beta, True))
             board.pop()
             beta = min(beta, best)
-            if beta <= alpha:
-                break
+            if beta <= alpha: break
         return best
 
-
-# ── ELO → minimax params (used only if Stockfish unavailable) ──────────────
 def _elo_to_minimax_params(elo):
     if elo < 800:    return 3, 0.35
     elif elo < 1000: return 3, 0.20
@@ -310,16 +159,11 @@ def _elo_to_minimax_params(elo):
     elif elo < 1800: return 4, 0.015
     elif elo < 2000: return 5, 0.008
     elif elo < 2200: return 5, 0.003
-    elif elo < 2500: return 5, 0.001
     else:            return 6, 0.0
 
-
-# ── Main move function ──────────────────────────────────────────────────────
 def get_bot_move(board, opening_book, stockfish_path=None, depth=None, elo=None):
     fen_key = " ".join(board.fen().split()[:4])
     target_elo = max(400, min(elo or 1200, 3200))
-
-    # 1. Opening book
     if fen_key in opening_book:
         moves = opening_book[fen_key]
         total = sum(moves.values())
@@ -331,20 +175,13 @@ def get_bot_move(board, opening_book, stockfish_path=None, depth=None, elo=None)
                 move = chess.Move.from_uci(uci_move)
                 if move in board.legal_moves:
                     return uci_move
-
     legal_moves = list(board.legal_moves)
-    if not legal_moves:
-        return None
-
-    # 2. Stockfish (if available)
+    if not legal_moves: return None
     if _stockfish is not None:
         try:
             skill_level, error_rate = _elo_to_stockfish_skill(target_elo)
-
-            # Occasional blunder to simulate human error
             if random.random() < error_rate:
                 return random.choice(legal_moves).uci()
-
             _stockfish.set_skill_level(skill_level)
             _stockfish.set_fen_position(board.fen())
             best = _stockfish.get_best_move()
@@ -354,25 +191,19 @@ def get_bot_move(board, opening_book, stockfish_path=None, depth=None, elo=None)
                     return best
         except Exception as e:
             print(f"Stockfish error: {e}, falling back to minimax")
-
-    # 3. Minimax fallback (with quiescence search)
     search_depth, error_rate = _elo_to_minimax_params(target_elo)
-
     if random.random() < error_rate:
         return random.choice(legal_moves).uci()
-
     maximizing = board.turn == chess.WHITE
     best_move = None
     best_score = -999999 if maximizing else 999999
     random.shuffle(legal_moves)
-
     for move in legal_moves:
         board.push(move)
-        score = _minimax(board, search_depth - 1, -999999, 999999, not maximizing)
+        score = _minimax(board, search_depth-1, -999999, 999999, not maximizing)
         board.pop()
         if maximizing and score > best_score:
             best_score, best_move = score, move
         elif not maximizing and score < best_score:
             best_score, best_move = score, move
-
     return best_move.uci() if best_move else random.choice(legal_moves).uci()
